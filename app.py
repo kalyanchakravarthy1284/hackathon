@@ -1,49 +1,45 @@
 from flask import Flask, render_template, request
-import pickle
 import numpy as np
-
-# Load model bundle
-with open("kmeans_model_bundle.pkl", "rb") as f:
-    bundle = pickle.load(f)
+import joblib  # To load the saved model and scaler
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return render_template("index.html")
+# Load the saved model and preprocessing objects
+kmeans = joblib.load('kmeans_model.joblib')
+scaler = joblib.load('scaler.joblib')
+pca = joblib.load('pca_model.joblib')
 
-@app.route("/predict", methods=["POST"])
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/predict', methods=['POST'])
 def predict():
-    try:
-        input_data = []
-        for feature in bundle["features"]:
-            val = request.form.get(feature)
+    if request.method == 'POST':
+        # Get form data from user input
+        age = float(request.form['age'])
+        sex = int(request.form['sex'])
+        job = int(request.form['job'])
+        housing = int(request.form['housing'])
+        saving_accounts = int(request.form['saving_accounts'])
+        checking_account = int(request.form['checking_account'])
+        purpose = int(request.form['purpose'])
+        credit_amount = float(request.form['credit_amount'])
+        duration = float(request.form['duration'])
 
-            # Apply label encoding if needed
-            if feature in bundle["label_encoders"]:
-                le = bundle["label_encoders"][feature]
-                if val not in le.classes_:
-                    # Handle unseen values
-                    return render_template("index.html", prediction=f"Error: Unknown value '{val}' for {feature}")
-                val = le.transform([val])[0]
-            else:
-                val = float(val)
+        # Create the feature vector from user input
+        input_data = np.array([[age, sex, job, housing, saving_accounts, checking_account, 
+                                purpose, credit_amount, duration]])
 
-            input_data.append(val)
+        # Preprocess the input
+        input_data_scaled = scaler.transform(input_data)
+        
 
-        # Convert to array and reshape
-        input_array = np.array(input_data).reshape(1, -1)
+        # Make prediction
+        prediction = kmeans.predict(input_data_scaled)[0]
+        result = "Good Credit" if prediction == 1 else "Bad Credit"
 
-        # Scale and predict
-        X_scaled = bundle["scaler"].transform(input_array)
-        # X_pca = bundle["pca"].transform(X_scaled)
-        cluster = bundle["kmeans"].predict(X_pca)[0]
-
-        return render_template("index.html", prediction=f"Predicted Cluster: {cluster}")
-
-    except Exception as e:
-        return render_template("index.html", prediction=f"Error: {e}")
-
+        return render_template('index.html', result=result)
 
 if __name__ == "__main__":
     app.run(debug=True)
